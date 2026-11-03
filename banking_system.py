@@ -13,8 +13,15 @@ class BankingSystem(ABC):
         Returns `True` if the account was successfully created or
         `False` if an account with `account_id` already exists.
         """
-        # default implementation
-        return False
+        if account_id in self.accounts:
+            return False 
+
+        self.accounts[account_id] = {
+            "account_opened" : timestamp, 
+            "balance": 0 
+        }
+
+        return True 
 
     def deposit(self, timestamp: int, account_id: str, amount: int) -> int | None:
         """
@@ -25,7 +32,10 @@ class BankingSystem(ABC):
         If the specified account doesn't exist, should return
         `None`.
         """
-        # default implementation
+        if account_id in self.accounts:
+            self.accounts[account_id]["balance"] += amount 
+            return self.accounts[account_id]["balance"]
+        
         return None
 
     def transfer(self, timestamp: int, source_account_id: str, target_account_id: str, amount: int) -> int | None:
@@ -41,7 +51,14 @@ class BankingSystem(ABC):
           * Returns `None` if account `source_account_id` has
           insufficient funds to perform the transfer.
         """
-        # default implementation
+        if (source_account_id != target_account_id
+            and source_account_id in self.accounts 
+            and target_account_id in self.accounts 
+            and self.accounts[source_account_id]["balance"] >= amount): 
+              self.accounts[source_account_id]["balance"] -= amount
+              self.accounts[target_account_id]["balance"] += amount
+              return self.accounts[source_account_id]["balance"]
+        
         return None
 
     def top_spenders(self, timestamp: int, n: int) -> list[str]:

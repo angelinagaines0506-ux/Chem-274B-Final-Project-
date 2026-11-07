@@ -18,7 +18,8 @@ class BankingSystem(ABC):
 
         self.accounts[account_id] = {
             "account_opened" : timestamp, 
-            "balance": 0 
+            "balance": 0,
+            "total_outgoing":0 
         }
 
         return True 
@@ -57,6 +58,10 @@ class BankingSystem(ABC):
             and self.accounts[source_account_id]["balance"] >= amount): 
               self.accounts[source_account_id]["balance"] -= amount
               self.accounts[target_account_id]["balance"] += amount
+
+              #Track total outgoing transactions for source account
+              self.accounts[source_account_id]["total_outgoing"] += amount
+
               return self.accounts[source_account_id]["balance"]
         
         return None
@@ -80,7 +85,14 @@ class BankingSystem(ABC):
           outgoing transactions.
         """
         # default implementation
-        return []
+        sorted_accounts=sorted(self.accounts.items(), key=lambda x: (-x[1]["total_outgoing"], x[0])
+                               )
+        
+        
+        return [
+            f"{account_id}({account_data['total_outgoing']})"
+            for account_id, account_data in sorted_accounts[:n]
+        ]
 
     def pay(self, timestamp: int, account_id: str, amount: int) -> str | None:
         """

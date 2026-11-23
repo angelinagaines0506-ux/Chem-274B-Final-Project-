@@ -13,6 +13,19 @@ class BankingSystemImpl(BankingSystem):
         self.payments = {}
         self.pending_cashbacks = []
 
+        # Level 4 - the balance change per account id as timestamp, balance 
+        # kept outside of self.accounts so that ids can keep their history
+
+        self.balance_history = {}
+
+    def _record_balance(self, timestamp: int, account_id: str, balance: int | None) -> None:
+        #TODO comments
+
+        if account_id not in self.balance_history:
+            self.balance_history[account_id] = []
+            
+        self.balance_history[account_id].append((timestamp, balance))
+
     def _process_cashbacks(self, timestamp: int) -> None:
         """
         Refunds all of the pending cashback when due time is ready for the refund. 
@@ -21,10 +34,12 @@ class BankingSystemImpl(BankingSystem):
         """
         # earliest due time at index 0, stops at the first one that's not due yet
         while self.pending_cashbacks and self.pending_cashbacks[0][0] <= timestamp:
-            _, payment_id = heapq.heappop(self.pending_cashbacks) 
+            due_time, payment_id = heapq.heappop(self.pending_cashbacks) 
             payment = self.payments[payment_id] 
             self.accounts[payment["account_id"]]["balance"] += payment["cashback"]
             payment["status"] = "CASHBACK_RECEIVED"
+
+            self._record_balance(due_time, payment["account_id"], self.accounts[payment["account_id"]]["balance"])
 
     def create_account(self, timestamp: int, account_id: str) -> bool:
         if account_id in self.accounts:
@@ -36,6 +51,8 @@ class BankingSystemImpl(BankingSystem):
             "total_outgoing":0 
         }
 
+        self._record_balance(timestamp, account_id, 0) 
+
         return True 
 
     def deposit(self, timestamp: int, account_id: str, amount: int) -> int | None:
@@ -43,6 +60,7 @@ class BankingSystemImpl(BankingSystem):
 
         if account_id in self.accounts:
             self.accounts[account_id]["balance"] += amount 
+            self._record_balance(timestamp, account_id, self.accounts[account_id]["balance"]) 
             return self.accounts[account_id]["balance"]
         
         return None
@@ -60,6 +78,9 @@ class BankingSystemImpl(BankingSystem):
 
               #Track total outgoing transactions for source account
               self.accounts[source_account_id]["total_outgoing"] += amount
+
+              self._record_balance(timestamp, source_account_id, self.accounts[source_account_id]["balance"])  
+              self._record_balance(timestamp, target_account_id, self.accounts[target_account_id]["balance"])
 
               return self.accounts[source_account_id]["balance"]
         
@@ -84,6 +105,7 @@ class BankingSystemImpl(BankingSystem):
         # withdraw and count it as outgoing which allows top_spenders to see it 
         self.accounts[account_id]["balance"] -= amount 
         self.accounts[account_id]["total_outgoing"] += amount
+        self._record_balance(timestamp, account_id, self.accounts[account_id]["balance"])
 
         # payment ids are numbered across all accounts. payments are never deleted
         # so the count is then going to be the next number 
@@ -110,5 +132,40 @@ class BankingSystemImpl(BankingSystem):
             return None
 
         return self.payments[payment]["status"] 
+
+    def merge_accounts(self, timestamp: int, account_id_1: str, account_id_2: str) -> bool:
+        self._process_cashbacks(timestamp) 
+        
+        #TODO comments for function
+        if (account_id_1 == account_id_2  
+            or account_id_1 not in self.accounts
+            or account_id_2 not in self.accounts): 
+            return False
+
+        self.accounts[account_id_1]["balance"] += self.accounts[account_id_2]["balance"] 
+        self.accounts[account_id_1]["total_outgoing"] += self.accounts[account_id_2]["total_outgoing"]
+
+        for payment_id in self.payments: 
+            if self.payments[payment_id]["account_id"] == account_id_2: 
+                self.payments[payment_id]["account_id"] = account_id_1
+
+        del self.accounts[account_id_2]
+
+        self._record_balance(timestamp, account_id_1, self.accounts[account_id_1]["balance"])
+        self._record_balance(timestamp, account_id_2, None) 
+
+        return True
+
+    def get_balance(self, timestamp: int, account_id: str, time_at: int) -> int | None:
+        self._process_cashbacks(timestamp) 
+
+        #TODO comments for function
+        balance_at_time = None
+        for entry_time, balance in self.balance_history.get(account_id, []): 
+            if entry_time > time_at: 
+                break
+            balance_at_time = balance
+
+        return balance_at_time
 
     
